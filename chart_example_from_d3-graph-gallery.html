@@ -1,0 +1,143 @@
+<!-- Code from d3-graph-gallery.com -->
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<!-- Load d3.js -->
+<script src="https://d3js.org/d3.v4.js"></script>
+<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+
+<style>
+  /* Define the tooltip style */
+  .tooltip {
+    position: absolute;
+    text-align: center;
+    padding: 6px;
+    font: 12px sans-serif;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    pointer-events: none;
+  }
+  /* Define the table style */
+  #table {
+    position: absolute;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    display: none;
+  }
+</style>
+
+<!-- Create an element where the map will take place -->
+<svg id="my_dataviz" width="400" height="300"></svg>
+
+<div class="tooltip" id="tooltip" style="display: none;"></div>
+<div id="table"></div>
+
+<script>
+
+// The svg
+var svg = d3.select("svg"),
+  width = +svg.attr("width"),
+  height = +svg.attr("height");
+
+// Map and projection
+var path = d3.geoPath();
+var projection = d3.geoMercator()
+  .scale(70)
+  .center([0, 20])
+  .translate([width / 2, height / 2]);
+
+// Define a zoomed projection for clicking on countries
+var zoomedProjection = d3.geoMercator()
+  .scale(200)  // Adjust the scale value as needed
+  .translate([width / 2, height / 2]);
+
+// Data and color scale
+var data = d3.map();
+var colorScale = d3.scaleThreshold()
+  .domain([100000, 1000000, 10000000, 30000000, 100000000, 500000000])
+  .range(d3.schemeBlues[7]);
+
+// Load external data and boot
+d3.queue()
+  .defer(d3.json, "https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
+  .defer(d3.csv, "https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world_population.csv", function(d) { data.set(d.code, +d.pop); })
+  .await(ready);
+
+function ready(error, topo) {
+  let tooltip = d3.select("#tooltip");
+  let table = d3.select("#table");
+
+  let mouseOver = function(d) {
+    tooltip.style("display", "block");
+    tooltip.html(d.properties.name)
+      .style("left", (d3.event.pageX) + "px")
+      .style("top", (d3.event.pageY - 30) + "px");
+    
+    d3.selectAll(".Country")
+      .transition()
+      .duration(200)
+      .style("opacity", 0.5);
+
+    d3.select(this)
+      .transition()
+      .duration(200)
+      .style("opacity", 1)
+      .style("stroke", "black");
+  }
+
+  let mouseClick = function(d) {
+    // Show population data in a table
+    table.style("display", "block");
+    table.html("<h2>" + d.properties.name + "</h2><table><tr><th>Country</th><th>Population</th></tr><tr><td>" + d.properties.name + "</td><td>" + data.get(d.id) + "</td></tr></table>");
+
+    // Transition to the zoomed projection centered on the clicked country
+    svg.transition()
+      .duration(750)
+      .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")scale(" + 2 + ")translate(" + -zoomedProjection([d.properties.name]) + ")");
+  }
+
+  let mouseLeave = function(d) {
+    tooltip.style("display", "none");
+
+    d3.selectAll(".Country")
+      .transition()
+      .duration(200)
+      .style("opacity", 0.8);
+
+    d3.select(this)
+      .transition()
+      .duration(200)
+      .style("stroke", "transparent");
+    
+    // Hide the table on mouse leave
+    table.style("display", "none");
+  }
+
+  // Draw the map
+  svg.append("g")
+    .selectAll("path")
+    .data(topo.features)
+    .enter()
+    .append("path")
+      // draw each country
+      .attr("d", d3.geoPath()
+        .projection(projection)
+      )
+      // set the color of each country
+      .attr("fill", function (d) {
+        d.total = data.get(d.id) || 0;
+        return colorScale(d.total);
+      })
+      .style("stroke", "transparent")
+      .attr("class", function(d){ return "Country" } )
+      .style("opacity", 0.8)
+      .on("mouseover", mouseOver)
+      .on("click", mouseClick)
+      .on("mouseleave", mouseLeave);
+}
+
+</script>
